@@ -28,29 +28,47 @@ public class GameView extends SurfaceView implements Runnable {
     private SurfaceHolder mSurfaceHolder;
     private EnemyShip e1,e2,e3;
     private ArrayList<SpaceDust> mStars  = new ArrayList<>();
-    private boolean boosting = false;
+    private boolean boosting;
+
+    private int screenX, screenY;
 
     private float distanceRemaining;
-    private long timeTaken;
-    private long timeStarted;
+    private long timeTaken ;
+    private long timeStarted ;
     private long fastestTime;
+
+    private Context mContext;
+    private boolean gameEnded;
 
     public GameView(Context context,int x,int y){
         super(context);
+        mContext = context;
+        screenX = x;
+        screenY = y;
         mSurfaceHolder = getHolder();
         mPaint = new Paint();
+        startGame();
+    }
 
+    private void startGame() {
         int numStars = 70;
 
         for(int i=0; i < numStars; i++){
-            SpaceDust dust = new SpaceDust(x,y);
+            SpaceDust dust = new SpaceDust(screenX,screenY);
             mStars.add(dust);
         }
 
-        mPlayerShip = new PlayerShip(context,x,y);
-        e1= new EnemyShip(context,x,y);
-        e2= new EnemyShip(context,x,y);
-        e3= new EnemyShip(context,x,y);
+        mPlayerShip = new PlayerShip(mContext,screenX,screenY);
+        e1= new EnemyShip(mContext,screenX,screenY);
+        e2= new EnemyShip(mContext,screenX,screenY);
+        e3= new EnemyShip(mContext,screenX,screenY);
+
+        distanceRemaining = 10000;
+        timeTaken = 0;
+        timeStarted = System.currentTimeMillis();
+        fastestTime = 10298;
+        gameEnded = false;
+        boosting = false;
     }
 
     @Override
@@ -63,6 +81,9 @@ public class GameView extends SurfaceView implements Runnable {
             case MotionEvent.ACTION_DOWN:
                 mPlayerShip.setBoosting();
                 boosting = true;
+                if(gameEnded){
+                    startGame();
+                }
                 break;
         }
         return  true;
@@ -88,14 +109,6 @@ public class GameView extends SurfaceView implements Runnable {
     }
 
     private void update() {
-        Rect playerBox = mPlayerShip.getHitbox();
-        if(Rect.intersects(playerBox, e1.getHitbox()))
-            e1.setX(-200);
-        if(Rect.intersects(playerBox, e2.getHitbox()))
-            e2.setX(-200);
-        if(Rect.intersects(playerBox, e3.getHitbox()))
-            e3.setX(-200);
-
         mPlayerShip.update();
 
         for (SpaceDust d : mStars) {
@@ -105,6 +118,42 @@ public class GameView extends SurfaceView implements Runnable {
         e1.update(mPlayerShip.getSpeed());
         e2.update(mPlayerShip.getSpeed());
         e3.update(mPlayerShip.getSpeed());
+
+        Rect playerBox = mPlayerShip.getHitbox();
+        boolean hitDetected = false;
+        if(Rect.intersects(playerBox, e1.getHitbox())) {
+            e1.setX(-200);
+            hitDetected = true;
+        }
+        if(Rect.intersects(playerBox, e2.getHitbox())) {
+            e2.setX(-200);
+            hitDetected = true;
+        }
+        if(Rect.intersects(playerBox, e3.getHitbox())) {
+            e3.setX(-200);
+            hitDetected = true;
+        }
+
+        if(hitDetected){
+            mPlayerShip.reduceShieldStrength();
+            if(mPlayerShip.getShieldStrength()<0){
+                //End Game
+                gameEnded = true;
+            }
+        }
+
+        if(!gameEnded){
+            distanceRemaining -= mPlayerShip.getSpeed();
+            timeTaken = System.currentTimeMillis() - timeStarted;
+        }
+
+        if(distanceRemaining < 0){
+            if(timeTaken < fastestTime){
+                fastestTime = timeTaken;
+            }
+            distanceRemaining = 0;
+            gameEnded = true;
+        }
     }
 
     private void draw(){
@@ -129,6 +178,29 @@ public class GameView extends SurfaceView implements Runnable {
             mCanvas.drawBitmap(e2.getEnemyBitmap(),e2.getX(),e2.getY(),mPaint);
             mCanvas.drawBitmap(e3.getEnemyBitmap(),e3.getX(),e3.getY(),mPaint);
 
+            mPaint.setColor(Color.argb(255,255,255,255));
+
+            if(!gameEnded) {
+                mPaint.setTextAlign(Paint.Align.LEFT);
+                mPaint.setTextSize(25);
+                mCanvas.drawText("Fastest: " + fastestTime + "s", 10, 20, mPaint);
+                mCanvas.drawText("Time: " + timeTaken + "s", screenX / 2, 20, mPaint);
+                mCanvas.drawText("Distance: " + distanceRemaining / 1000 + " KM", screenX / 3, screenY - 20, mPaint);
+                mCanvas.drawText("Shield: " + mPlayerShip.getShieldStrength(), 10, screenY - 20, mPaint);
+                mCanvas.drawText("Speed: " + mPlayerShip.getSpeed() * 60 * 20 + " KM/h", (screenX / 3) * 2, screenY - 20, mPaint);
+            }else {
+                mPaint.setTextAlign(Paint.Align.CENTER);
+                mPaint.setTextSize(80);
+                mCanvas.drawText("Game Over: ", screenX/2, 100, mPaint);
+                mPaint.setTextSize(25);
+                mCanvas.drawText("Fastest: " + fastestTime + "s", screenX/2, 160, mPaint);
+                mCanvas.drawText("Time: " + timeTaken + "s", screenX / 2, 200, mPaint);
+                mCanvas.drawText("Distance: " + distanceRemaining / 1000 + " KM", screenX / 2, 240, mPaint);
+
+                mPaint.setTextSize(80);
+                mCanvas.drawText("Tap To Replay", screenX / 2, 350, mPaint);
+            }
+
             mSurfaceHolder.unlockCanvasAndPost(mCanvas);
         }
     }
@@ -139,7 +211,7 @@ public class GameView extends SurfaceView implements Runnable {
             gameThread.join();
         }
         catch (InterruptedException e){
-
+            Log.i(TAG, "Error");
         }
     }
 
