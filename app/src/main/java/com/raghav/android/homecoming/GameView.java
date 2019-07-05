@@ -1,11 +1,16 @@
 package com.raghav.android.homecoming;
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.media.AudioManager;
+import android.media.SoundPool;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -29,9 +34,7 @@ public class GameView extends SurfaceView implements Runnable {
     private EnemyShip e1,e2,e3;
     private ArrayList<SpaceDust> mStars  = new ArrayList<>();
     private boolean boosting;
-
     private int screenX, screenY;
-
     private float distanceRemaining;
     private long timeTaken ;
     private long timeStarted ;
@@ -39,14 +42,54 @@ public class GameView extends SurfaceView implements Runnable {
 
     private Context mContext;
     private boolean gameEnded;
+    private SoundPool mSoundPool;
+    int start = -1;
+    int bump = -1;
+    int destroyed = -1;
+    int win = -1;
+
+    private SharedPreferences preferences;
+    private SharedPreferences.Editor editor;
+
 
     public GameView(Context context,int x,int y){
         super(context);
         mContext = context;
+        mSoundPool = new SoundPool(10, AudioManager.STREAM_MUSIC,0);
+        mSoundPool.setOnLoadCompleteListener(new SoundPool.OnLoadCompleteListener() {
+            @Override
+            public void onLoadComplete(SoundPool soundPool, int sampleId, int status) {
+                if(sampleId==start){
+                    mSoundPool.play(start ,1,1,0,0,1);
+                }
+            }
+        });
+        try{
+            AssetManager assetManager = context.getAssets();
+            AssetFileDescriptor descriptor ;
+
+            descriptor = assetManager.openFd("win.ogg");
+            win = mSoundPool.load(descriptor,0);
+
+            descriptor = assetManager.openFd("bump.ogg");
+            bump = mSoundPool.load(descriptor,0);
+
+            descriptor = assetManager.openFd("destroyed.ogg");
+            destroyed = mSoundPool.load(descriptor,0);
+
+            descriptor = assetManager.openFd("start.ogg");
+            start = mSoundPool.load(descriptor,0);
+            Log.i(TAG, "Start value"+start);
+
+        }catch (Exception e){
+            Log.i(TAG, "GameView: Error");
+        }
         screenX = x;
         screenY = y;
         mSurfaceHolder = getHolder();
         mPaint = new Paint();
+        preferences = context.getSharedPreferences(MainActivity.PREF_TAG,Context.MODE_PRIVATE);
+        editor = preferences.edit();
         startGame();
     }
 
@@ -66,9 +109,13 @@ public class GameView extends SurfaceView implements Runnable {
         distanceRemaining = 10000;
         timeTaken = 0;
         timeStarted = System.currentTimeMillis();
-        fastestTime = 10298;
+        fastestTime = preferences.getLong(MainActivity.TIME_TAG,-1);
+        if(fastestTime==-1){
+            fastestTime=1000000;
+        }
         gameEnded = false;
         boosting = false;
+        mSoundPool.play(start ,1,1,0,0,1);
     }
 
     @Override
@@ -135,9 +182,11 @@ public class GameView extends SurfaceView implements Runnable {
         }
 
         if(hitDetected){
+            mSoundPool.play(bump,1,1,0,0,1);
             mPlayerShip.reduceShieldStrength();
             if(mPlayerShip.getShieldStrength()<0){
                 //End Game
+                mSoundPool.play(destroyed,1,1,0,0,1);
                 gameEnded = true;
             }
         }
@@ -148,8 +197,11 @@ public class GameView extends SurfaceView implements Runnable {
         }
 
         if(distanceRemaining < 0){
+            mSoundPool.play(win,1,1,0,0,1);
             if(timeTaken < fastestTime){
                 fastestTime = timeTaken;
+                editor.putLong(MainActivity.TIME_TAG,fastestTime);
+                editor.commit();
             }
             distanceRemaining = 0;
             gameEnded = true;
@@ -219,5 +271,6 @@ public class GameView extends SurfaceView implements Runnable {
         playing=true;
         gameThread = new Thread(this);
         gameThread.start();
+
     }
 }
